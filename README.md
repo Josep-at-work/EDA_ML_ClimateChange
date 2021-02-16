@@ -1,5 +1,5 @@
 # Trabajo Final Tec.ADM
- Trabajo final de la asignatura de tecnologías para el análisis de datos massivos
+ Trabajo final de la asignatura de tecnologías para el análisis de datos massivos.
 
 + [Report.Rmd](https://github.com/Josep-at-work/Trabajo-Final-Tec.ADM/blob/main/Report.Rmd) contiene el código principal con el que se ha desarrollado el informe.
 + Report.html es el informe para el que he usado el formato de R Markdown [distill](https://rstudio.github.io/distill/).
