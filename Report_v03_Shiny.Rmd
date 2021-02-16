@@ -1,0 +1,1063 @@
+---
+title: "Trabajo Final"
+description: 
+  "Trabajo final de la asignatura de Tecnologías para el Análisis de Datos Masivos"
+aauthor:
+  - first_name: "Josep"
+    last_name: "Roman Cardell"
+    url: https://github.com/Josep-at-work
+    affiliation: UIB
+    affiliation_url: https://www.uib.cat/
+date: 1/2/2021
+output:
+  distill::distill_article:
+    code_folding: true
+runtime : shiny_prerendered
+# header-includes:
+#   - \renewcommand{\tablename}{Tabla}
+---
+
+```{r context="setup", include=FALSE}
+
+library(kableExtra)
+
+knitr::opts_chunk$set(
+	echo = TRUE,
+	message = FALSE,
+	warning = FALSE
+)
+```
+
+```{r context="setup", include=FALSE}
+
+library(kableExtra)
+
+knitr::opts_chunk$set(
+	echo = TRUE,
+	message = FALSE,
+	warning = FALSE
+)
+```
+
+```{r include=FALSE}
+rm(list=ls())
+```
+
+```{r Librerias R, include=FALSE }
+#Basic
+library(tidyverse) #incluye dplyr, ggplot2 y tidyr
+library(magrittr)
+library(kableExtra)
+
+#Python
+library(reticulate)
+
+#Visualizations & interactive tables
+library(ggplot2)
+library(plotly)
+library(ggrepel)
+library(see) 
+library(data.table)
+library(DT)
+
+#Aprendizaje Estadístico 
+library(caret)
+library(randomForest)
+library(leaps) #Model Selection
+
+#Others
+library(shiny) #(deploy app) rsconnect::deployApp("Report_v02.Rmd")
+# library(rsconnect)
+library(pracma) #Hampel Outliers
+# library(plyr) # Tools for Split and Combining Data
+```
+
+```{python Librerias Py, include=FALSE}
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sn
+import os
+
+# os.getcwd()
+```
+
+# 1. Contexto  
+
+Por cambio climático entendemos tanto el calentamiento global resultado de las emisiones de gases de efecto invernadero, como el incremento en la frecuencia de las catástrofes naturales causadas por las transformaciones en el clima. Este, representa una amenaza existencial y aunque la comunidad científica lo lleva advirtiendo hace años, los gobiernos anteponen políticas con resultados económicamente favorables a corte plazo a determinadas medidas de reducción del cambio climático. 
+
+Existen dos problemas destacados por los que no se están aplicando más medidas para combatir al cambio climático:  
+  
+  + Las tecnologías actuales para combatir el cambio climatico tienen por lo general un coste elevada y no conllevan un impacto economicamente favorable directo.   
+  + Es difícil asegurar que las medidas a favor de erradicar el cambio climático van a afectar por igual a todos lo habitantes del planeta.
+
+Con este proyecto se pretende desarrollar una visión intuitiva de la diferencia entre paises en cuanto al uso de energías renovables y convencionales. También como afectan al cambio climático y los efectos negativos este medidos con la diferencia de temperatura. 
+
+Los datos tomados se dividen en tres tablas:
+
+  + *Emissiones$CO_2$capita*: contiene las emisiones de $CO_2$ por país y año. Para poder comparar las emisiones anuales entre países, estas se miden en toneladas por persona. Estos datos solo reflejan las emisiones resultantes de la **producción dentro del territorio nacional**, sin tener en cuenta las emisiones por transporte de bienes, i.e. importaciones/exportaciones. Los datos se han contrastado con los datos de [Our World in Data](https://ourworldindata.org/co2-and-other-greenhouse-gas-emissions) y [CDIAC](https://cdiac.ess-dive.lbl.gov/).
+  
+  + *ConsumoEnergetico*: agrupa el consumo de energías primarias dividido según su fuente  (e.g. gas natural, carbón, renovables) por país y año. No todas las variables son estrictamente del mismo tipo ya que, por una parte hay consumos de gas, petróleo y carbón en *ExaJoules* ($EJ$), y por otra parte valores de generación en *Tera Vatios por hora* ($TWh$). Como el objetivo es desarrollar una comparativa entre países, esta diferencia no crea ningún problema. Estas cifras, a diferencia de las emisiones de $CO_2$, son **acumulados por país y no por persona**. Los datos se han contrastado con el siguiente informe, [BP, Statistical Review of World Energy](https://www.bp.com/en/global/corporate/energy-economics/statistical-review-of-world-energy.html)
+
+  + *CambiosTemperatura*: contiene las anomalías de temperatura de la superficie terrestre en grados *Celsius*, i.e. el cambio de temperatura con respecto a una referencia climatológica que se corresponde con el periodo de 1951 a 1980. Este *dataset* cubre el periodo de 1961 a 2019 con estadísticas mensuales, estacionales y anuales del cambio de temperatura medio y su desviación estándar respecto al periodo de referencia. Los datos están publicados en [Climate Nasa](https://climate.nasa.gov/vital-signs/global-temperature/) distribuidos por la *NASA-GISS*.
+  
+  + *Codigo_Pais*: es una tabla adicional con los nombres de todos los **países** y sus respectivos **códigos** siguiendo la [ISO](https://www.nationsonline.org/oneworld/country_code_list.htm) reconocida a nivel internacional con la combinación de dos o tres dígitos.
+
+La primera tabla se ha obtenido de [CDP, Kaggle](https://www.kaggle.com/seraphimstreets/environmentequity-starterpack) y se ha contrastado con las fuentes mencionadas para determinar a que hacen referencia exactamente los datos con el fin de no llegar a conclusiones erróneas. La segunda tabla ha sido obtenida directamente de [OWID](https://ourworldindata.org/co2-and-other-greenhouse-gas-emissions) y la tercera tabla de [Temperature Change, Kaggle](https://www.kaggle.com/sevgisarac/temperature-change). La tabla de códigos se encuetra en [Country Code, Kaggle](https://www.kaggle.com/koki25ando/country-code).
+
+
+```{r Theme, include = FALSE}
+My_Theme = theme(
+  axis.title.x = element_text(size = 16), axis.text.x = element_text(size = 14),
+  axis.title.y = element_text(size = 16)) +
+  theme_minimal()
+My_Theme2 = theme(
+  axis.title.x = element_text(size = 10), axis.text.x = element_text(size = 8),
+  axis.title.y = element_text(size = 10)) +
+  theme_minimal()
+```
+ 
+# 2. Modelo de datos
+
+## 2.1 Selección de variables  
+
+```{r Carga Tablas, code_folding = F}
+# Carga de datos
+co2 = read_csv("Datos/EmisionesC02capita.csv")
+energia = read_csv("Datos/ConsumoEnergetico.csv")
+temp = read_csv("Datos/CambiosTemperatura.csv")
+cod = read_csv("Datos/Codigo_Pais.csv")
+```
+
+Tras la carga de las tablas se han traducido los nombres de las variables.
+
+La tabla de las temperaturas ha requerido de varios cambios para extraer las anomalías de temperatura. En primer lugar se han seleccionado solo las variables útiles para este informe. En segundo lugar, de la variable *Month* que contiene valores por mes, estación y año, solo se han tomado los valores anuales. La variable *Element* contiene la desviación estándar y el valor puntual de temperatura por lo que se ha filtrado solo el segundo valor. A continuación, se han **pivotado las columnas** en las que aparecen los años como variables. Los años se han usado para crear una nueva variable (*Año*) y los valores de temperatura se han añadido a una columna adicional (*Dif_Temp*). Esta variable representa la diferencia de temperatura para un año y país concretos con respecto al período de referencia mencionado en le contexto de los datos. Para concluir, se han seleccionadas las variable *Pais* y *Codigo* de la tabla de códigos. 
+
+```{r Modificaciones Tablas}
+# Selección de variables de cada tabla
+co2 %<>% select('Pais' = 'country', 'Codigo' = 'iso_code', 'Año' = 'year',
+                'CO2' = 'co2_per_capita')
+
+energia %<>% select('Pais' = 'Entity', 'Codigo' = 'Code', 'Año' = 'Year', 
+                    'Carbon' = 'Coal Consumption - EJ', 'Gas' = 'Gas Consumption - EJ', 
+                    'Petroleo' = 'Oil Consumption - EJ', 'Nuclear' = 'Nuclear Generation - TWh',
+                    'Biomasa' = 'Geo Biomass Other - TWh', 'Hidraulica' = 'Hydro Generation - TWh',
+                    'Solar' = 'Solar Generation - TWh', 'Eolica' = 'Wind Generation -TWh')
+
+temp %<>% select('Pais' = 'Area', Months, Element, Y1961:Y2019) %>% 
+  filter(Months == 'Meteorological year' & Element == 'Temperature change') %>%
+  pivot_longer(c('Y1961':'Y2019'), names_to = 'Año', values_to = 'Dif_Temp') %>% 
+  select(Pais, Año, Dif_Temp)
+
+temp$Año = as.numeric(gsub('Y', '', temp$Año))
+cod %<>% select('Pais' = 'Country_name', 'Codigo' = 'code_3digit')
+```
+
+Las tres tablas tienen distintos **rangos de años**, siendo el registro relacionado con la energía el más nuevo por lo que ha marcado el rango de años de las otras dos tablas. 
+
+También es diferente el **número de países**. Con un rápido análisis se ha observado como la tabla de energías solo contiene información de países con una población relevante, mientras que las otras dos monitorizan valores de todo el mundo. Por ejemplo, no se tiene el consumo de energía en la Antártida pero si su temperatura y $CO_2$. El elevado número de valores de está variable también se debe a que existen valores que agrupan países y a su vez están listados los países que se encuentran en dichas zonas. Es para unificar el nombre de los países, o áreas territoriales, y evitar agrupaciones que se ha añadido la tabla de códigos. 
+
+```{r}
+# Rango de Años y Países
+resumen = data.frame(Tabla = c("Energía", "CO2", "Temperatura"),
+                     "Inicio_Registro" = c(min(energia$Año), min(co2$Año), min(temp$Año)),
+                     "Fin_Registro" = c(max(energia$Año), max(co2$Año), max(temp$Año)),
+                     "Países" = c(length(unique(energia$Pais)), length(unique(co2$Pais)), length(unique(temp$Pais)))
+                     )
+kable(resumen, caption = 'Rango de Años y Total de paises', booktabs = T) %>%
+  kable_styling(latex_options = 'hold_position', font_size = 14)
+```
+
+Para pode analizar la relación entre los tres factores (**energía**, **temperatura** y $CO_2$) en los distintos países, se han unido las tablas mediante un *inner join*. De esta manera los datos de los países y años resulten estarán completos. En primer lugar, se ha añadido la variable de códigos a las temperaturas y, a continuación, se han añadido las variables de energía y $CO_2$ mediante la **Key: (Código, Año)**. En segundo lugar, se han seleccionado las variables de interés y, finalmente, se han ordenado las observación manteniendo primero el orden alfabético del nombre del país y luego por orden cronológico.
+
+```{r Join, code_folding = F}
+# Inner Join
+datos <- temp %>% inner_join(cod, by='Pais') %>%
+  inner_join(energia, by=c('Codigo','Año')) %>% 
+  inner_join(co2, by=c('Codigo','Año')) %>%
+  select('Pais', 'Codigo', 'Año', 'Dif_Temp','CO2','Carbon':'Eolica')
+# Orden cronológico
+datos <- datos[order(datos$Año, decreasing=F),] %>% as.data.frame()
+```
+
+```{r Tabla Interactiva 1, layout="l-page"}
+# Tabla Interactiva 1
+datos %>% mutate(across(where(is.numeric), ~round(.,3))) %>%
+  mutate(across(where(is.character), as.factor)) %>% 
+  datatable(rownames = F,
+            options = list(pageLength = 5),
+            caption = htmltools::tags$caption(style = 'caption-side: bottom; text-align: center;',
+                                              'Tabla Interactiva 1: ', 
+                                              htmltools::em('Resultado de la unión de las tablas')
+   ))
+```
+<aside>
+**_Haz una búsqueda por nombre de los países que quieras visualizar_** 
+</aside>
+
+Para concluir la selección de variables se ha cambiado el formato de la información de las energías renovables para contar con una variable categórica. Teniendo en cuenta que cada observación es una combinación de país y año, se han creado las siguientes variables:
+
++ **Renovable**: Fuente de energía renovable que más energía generó. Las observaciones cuya generación total por fuentes renovables es nula se ha indicado con el valor *NO*.   
++ **Gen_Ren**: Total de energía generada a partir de fuentes renovables, en *TWh*. 
+
+A continuación, se han eliminado las variables de generación energética por fuentes renovables.
+
+```{r Creación Variable Categórica}
+# Nuevas variables
+renovables = colnames(datos)[10:13]
+ren_fun = function(row){
+  if (sum(row)!=0) {
+    tipo = which.max(row)
+    return(renovables[tipo])
+  }
+  else {
+    return("NO")
+  }
+}
+
+# Renovable
+datos$Renovable = apply(datos[,10:13], 1, FUN = ren_fun)
+
+# Gen_Ren
+datos %<>% mutate(Gen_Ren = Biomasa + Hidraulica + Solar + Eolica,) %>%
+  select(-c("Biomasa", "Hidraulica", "Solar", "Eolica"))
+```
+
+## 2.2 Limpieza de datos  
+
+### Valores Nulos  
+
+Observando las 5 primeras filas se detecta que hay dos tipos de valores a tener en cuenta, los que son 0 resultantes del **registro de información con un valor de nulo**, y los *NA*, resultantes de **no registrar** esa información específica.  
+
+```{r Nas}
+# Total de NAs
+df = data.frame() %>% rbind(rep(0,ncol(datos)))
+names(df) = names(datos) 
+for (i in 1:ncol(datos)) {
+  df[1,i] = sum(is.na(datos[,i]))
+}
+kable(df, caption = 'Valores no registrados por variable', booktabs = T) %>%
+  kable_styling(latex_options = 'hold_position', font_size = 14)
+```
+
+Analizando los países y períodos con *NA's*, se ha encontrado una relación entre los períodos de valores faltantes con el resultado de situaciones históricas. Con la disolución en el 1991 de la Unión Soviética y en el 1992 de la República Federal Socialista de Yugoslavia, surgieron varios países como Azerbayan, Estonia o Rusia por un lado y Croacia o Eslovenia de la otra división. Esto explica que haya 12 países con *NA's* en la variable de temperatura hasta el 1992. De forma similar Eslovaquia presenta *NA's* hasta el 1993 cuando se disolvió Checoslovaquia. Entonces estos hechos históricos tienen un efecto sobre una de las variables, *Dif_Temp*. Eliminando estas observaciones se perdería la información de las otras variables que si está registrada entonces se han sustituido los *NA's* por *0's*, para conservar las otras variables. De ser necesario esto se tendrá en cuenta en futuros análisis.
+
+Otra opción sería analizar los países que hacen frontera con estos problemáticos y hacer una media ponderada de sus valores de temperatura, pero eso requeriría un análisis más exhaustivo teniendo en cuenta la dimensión de cada país y sus respectivas fronteras.
+
+```{r Paises con NAs}
+# Paises con Temperatura no registrada
+datos[which(is.na(datos$Dif_Temp)),c('Pais','Año')] -> nans
+unique(nans$Pais)
+```
+
+<aside>
+**_Países en que faltan registros de temperatura._**
+
+**Con la _Tabla Interactiva 1_ pueden comparar los períodos sin valores de temperatura con sus libros de historia para entender la relación explicada.**
+</aside> 
+
+También hay *NA's* en el registro de petróleo de Bangladesh hasta el 1971, cuando se independizo de Pakistán. Las variables de energía no representan valores percápita, si no el total del país por lo que no sería correcto asignar los valores de Pakistán a estos fuera de registro. Del mismo modo que han procedido al registrar los datos de las variables de energía de Bangladesh para ese mismo período de tiempo, se han asignado a un valor de 0.
+
+```{r Reemplazar NA}
+# Reemplazo de los NA's
+datos$Dif_Temp %<>% replace(is.na(datos$Dif_Temp), 0)
+datos$Petroleo %<>% replace(is.na(datos$Petroleo), 0)
+```
+
+A raíz del descubrimiento de valores no registrados se ha procedido a comprobar que todos los países tengan el mismo rango de años.
+
+```{r Años Faltantes, code_folding = F}
+P65 = datos %>% filter(Año == 1965) %>% select(Pais)
+P19 = datos %>% filter(Año == 2019) %>% select(Pais)
+setdiff(P19$Pais,P65$Pais) 
+```
+
+Las observaciones de estos países no empiezan en el 1965 como el resto.
+
+```{r Años Faltantes 2}
+P85 = datos %>% filter(Año == 1985) %>% select(Pais)
+URSS <- setdiff(P85$Pais, P65$Pais) #1985 aparecen 10 países de la URSS
+P90 = datos %>% filter(Año == 1990) %>% select(Pais)
+RFSI <- setdiff(P90$Pais,  P85$Pais) #1990 aparecen dos países de la Rep.Fed.Soc. de Yugoslavia
+```
+
+Se ha confirmado que se empezaron a tener datos de Croacia y Eslovenia en el 1990 y en el 1985 el resto de países.
+
+### Valores Atípicos  
+
+Se ha considerado que debido a las diferencias de población y territorio entre países, los *outliers* deben ser detectados por países. 
+
+```{r Función, code_folding = F}
+# Detección de Outliers
+out_det <- function(data, paises, años, n){ 
+  outliers = list()
+  for ( pais in paises ) {
+    p = data %>% filter(Pais == pais)
+    outliers[[pais]] = hampel(p[,n], k = 10, t0 = 3)$ind #Longitud ventana = 2*k+1
+  }
+  if (isempty(outliers)) {
+    return("0 Outliers")
+  }
+  else{
+    df = as.data.frame(plyr::ldply(outliers, rbind))
+    colnames(df)[1] = "Pais"
+    df %<>%
+      pivot_longer(!Pais ,values_to = "indx") %>%
+      select(Pais,indx)
+  
+    for (i in 1:nrow(df)){
+      if (df$Pais[i] %in% URSS){
+        df$indx[i] = años[df$indx[i + 20]]
+      }
+      if (df$Pais[i] %in% RFSI){
+        df$indx[i] = años[df$indx[i + 25]]
+      }
+      else {
+        df$indx[i] = años[df$indx[i]]
+      }
+    }
+    return(na.omit(df))
+  }
+}
+paises = unique(datos$Pais)
+años = unique(datos$Año)
+```
+
+La función `out_det()` implementa un *hample filter* para la detección de valores atípicos en series temporales y hace un *loop* para analizar cada país por separado. Esta se ha aplicado a cada una de la variables.
+
+```{r Ejemplo Outlier}
+# Se ha procedido igual con cada variable
+# cada una con su respectiva n, i.e columna
+outliers_temp = out_det(datos,paises, años, n = 4)
+```
+
+```{r Outliers2, include=FALSE}
+outliers_co2 = out_det(datos,paises, años, 5)
+outliers_carb = out_det(datos,paises, años, 6)
+outliers_gas = out_det(datos,paises, años, 7)
+outliers_petr = out_det(datos,paises, años, 8)
+outliers_nuc = out_det(datos,paises, años, 9)
+outliers_renov = out_det(datos,paises, años, 11)
+```
+
+Todas las variables excepto *Gas* tienen valores atípicos. A modo de ejemplo se muestran los *outliers* del consumo de petróleo:
+
+```{r}
+# Outliers Consumo Petróleo
+colnames(outliers_petr) = c("País", "Año")
+kable(outliers_petr, caption = 'Outliers Petróleo', booktabs = T) %>%
+  kable_styling(full_width = F,latex_options = 'hold_position', font_size = 14) %>%
+  column_spec(1,width = "3cm") %>%
+  column_spec(2,width = "3cm")
+```
+
+Todos los valores atípicos han sido analizados y ninguno de ellos es resultado de una medición errónea de las variables. Entonces, se ha decidido no reemplazarlos ya que representan cambios significativos reales que afectan a los países.  
+
+```{r, include=FALSE}
+outliers_petr = out_det(datos, paises, años, 8)
+```
+
+La siguiente gráfica muestra la frecuencia de valores atípicos por año. 
+
+```{r Plot Outliers Frec, layout="l-body-outset"}
+# Frecuencia Outliers
+outliers <- rbind(outliers_temp, outliers_co2, outliers_carb,
+                  outliers_petr, outliers_nuc, outliers_renov)
+outliers %>% mutate(Año = as.factor(indx)) %>%
+  ggplot(aes(x = Año, fill = Año, color = "tomato1")) +
+    geom_bar(stat = 'count', alpha = 0.8) +
+    My_Theme + 
+    theme(axis.text.x = element_text(angle = 90), legend.position = "none") +
+    ggtitle("Frecuencia de Outliers", subtitle = "Por Año")
+```
+
+Como futuros proyectos se podría realizar un análisis con más profundidad de los valores atípicos teniendo en cuenta si son anómalos por encima o por debajo del resto de valores y ver si están relacionados los valores atípicos entre variables. 
+
+## 2.3 Tipología de datos  
+
+```{r Tipo de datos}
+# Tipología de datos
+datos %<>% mutate(across(Año,as.integer), across(c(Pais,Renovable), as.factor))
+str(datos)
+```
++ **Factor**: Las dos variables tipo *factor*, son categóricas que describen el país y el tipo de tecnología renovable que más energía generó. Los factores facilitan agrupaciones y aplicaciones de modelos estadísticos. 
++ **Character**: El código del país recibe un uso como etiqueta por lo que se ha mantenido como *char*.     
++ **Number**: Las otras variables son numéricas siendo el año un *integer* y las demás de tipo doble ya que pueden tener decimales.
+
+# 3. Análisis Exploratorio
+
+En este apartado se ha analizado la distribución de las variables agrupadas por países. A continuación, se ha entrado con más detalle a analizar los valores relacionados con el consumo energético y finalmente se ha analizado la relación de las diferéncias de temperatura con las emisiones de $CO_2$ percápita. 
+
+```{r Distribución Variables, code_folding = F}
+# Estadísticos
+stats <- datos %>% 
+  pivot_longer(cols = c(Dif_Temp, CO2, Carbon, Gas, Petroleo, Nuclear, Gen_Ren),
+                       names_to = "Variable", values_to = "Valores") %>%
+  group_by(Pais, Variable) %>%
+  summarise(Media = mean(Valores), Desv.Est. = std(Valores), 
+            Min = min(Valores), Q1 = quantile(Valores, 0.25),
+            Mediana = median(Valores), Q3 = quantile(Valores, 0.75),
+            Max = max(Valores), Sumatorio = sum(Valores))
+```
+
+```{r Tabla Interactiva 2, layout="l-body-outset"}
+# Tabla interactiva 2
+stats %>% mutate(across(where(is.numeric), ~round(.,3))) %>%
+  mutate(across(where(is.character), as.factor)) %>% 
+  datatable(rownames = F, filter = 'bottom',
+            options = list(pageLength = 5),
+            caption = htmltools::tags$caption(
+              style = 'caption-side: bottom; text-align: center;',
+              'Tabla Interactiva 2: ',
+              htmltools::em('Distribución de las variables contínuas por país, datos del 1965 hasta 2019')
+   ))
+```
+
+<aside>
+**_Permite comparar estadísticos de la misma variable entre países_**
+</aside>
+
+Por una parte, la **media** y la **desviación típica** dan una intuición de como se comporta la función de  distribución de las variables. Los valores **mínimo**, **máximo** y los **cuartiles** marcan la distribución del rango de valores de las variables. Y para acabar el **sumatorio** aporta una medida de la dimensión de la variable durante todo el período del 1965 al 2019. El interés de estos valores en concreto radica en poder comparar los países con la tabla interactiva.
+
+## 3.1 Consumo energético  
+
+Para poder visualizar conjuntamente la energía que proviene de distintas fuentes, se han transforman las energías nuclear y renovables a $EJ$, donde $1000TWh = 3.6EJ$.  
+
+```{r Consumo País, layout = "l-page", fig.height = 4}
+# Consumo por país
+cons_por_pais19 = datos %>%
+  filter(Año == 2019) %>%
+  mutate(Nuclear = Nuclear*3.6*10^-3, 
+         Renovables =  Gen_Ren*3.6*10^-3,
+         `Consumo Total` = Carbon + Gas + Petroleo + Nuclear + Renovables)
+# Top 10
+top_10 = cons_por_pais19 %>% 
+  arrange(-`Consumo Total`) %>%
+  head(10) %>% 
+  pivot_longer(c( "Consumo Total", 'Carbon':'Nuclear', "Renovables"), 
+               names_to = 'Fuente',
+               values_to = 'Consumo') %>%
+  mutate(Pais = factor(Pais, levels=c(c("China", "United States", "India", "Russia", "Japan", 
+                                        "Germany", "Canada", "Saudi Arabia", "Brazil", "Indonesia"))))
+top_10 %>%
+  ggplot(aes(x = Pais, y = Consumo, fill = Pais)) +
+    geom_bar(stat = "identity", alpha = 0.8) +
+    facet_wrap(~ Fuente, scales = "free") +
+    ylab("Consumo (EJ)") + xlab("País") +
+    My_Theme2 + 
+   theme(axis.title.x = element_blank(), axis.text.x = element_blank(),axis.ticks.x = element_blank()) +
+    ggtitle("Países con mayor consumo energético", subtitle = "Top 10, 2019, por fuente energética primaria")
+```
+
+El conjunto de gráficos muestra como China y EE.UU son los mayores consumidores de energía aunque dependiendo de la fuente primaria hay algunas variaciones en el ranking. El dato más destacable es el caso de Rusia que consume más energía producida con gas natural que China y el hecho que Arabia Saudi se encuentre en el top 10 de consumo total basando su consumo tan solo en petróleo y gas natural. 
+
+```{r Consumo Total(EJ), code_folding = F}
+# Evolución Consumo Total
+consumo_total = datos %>%
+  group_by(Año) %>% 
+  summarise(Carbon = sum(Carbon), Gas = sum(Gas), Petroleo = sum(Petroleo),
+            Nuclear = sum(Nuclear)*3.6*10^-3, Renovables = sum(Gen_Ren)*3.6*10^-3)
+```
+
+```{r Plot Cons. Tot., layout="l-page"}
+consumo_total %>%
+  pivot_longer(c('Carbon':'Renovables'), 
+               names_to = 'Fuente',
+               values_to = 'Consumo') %>% 
+  mutate(Fuente = factor(Fuente, levels=c("Renovables","Nuclear","Gas","Petroleo","Carbon"))) %>%
+    ggplot(aes(x = Año, y = Consumo, fill = Fuente)) +
+      geom_area(alpha = 0.8) + 
+      scale_x_continuous(breaks = seq(1965,2020,5)) +
+      ylab("Consumo(EJ)") +
+      ggtitle("Consumo Energético Total(EJ), 1965 a 2019") + 
+      My_Theme -> plot3
+ggplotly(plot3)
+```
+
+En este gráfico se puede ver como el consumo energético total se ha más que cuadriplicado en las últimas 6 décadas, especificamente para los países contenidos en estos datos, de `r round(sum(consumo_total[1,2:6]),3)` a  `r round(sum(consumo_total[55,2:6]),2)` Exajoules. Este incremento coincide con el [aumento de la población mundial](https://www.datosmundial.com/crecimiento-poblacional.php?from=1960&to=2019) que durante este período, se ha duplicado, y  con que la mayoría de países han aumentado sus niveles de consumo.
+
+
+El siguiente gráfico representa la evolución de la proporción de energía consumida de todos los países, según la fuente primaria. Se puede elegir el país que se quiera visualizar, teniendo la opción de *Total* para ver el global.
+
+```{r Consumo Proporcional por Pais}
+consumo_pais <- datos %>%
+  mutate(Nuclear = Nuclear*3.6*10^-3, Renovables = Gen_Ren*3.6*10^-3) %>%
+  select(Año, Pais, Carbon, Gas, Petroleo, Nuclear, Renovables)
+consumo_total$Pais = "Total"
+consumo_pais %<>% rbind(consumo_total)
+consumo_pais %<>% mutate(Año, Pais, sum = Carbon+Gas+Petroleo+Nuclear+Renovables,
+                        Carbon = 100*Carbon/sum,Gas = 100*Gas/sum,
+                        Petroleo = 100*Petroleo/sum,Nuclear = 100*Nuclear/sum, 
+                        Renovables = 100*Renovables/sum) %>% select(-c(sum))
+consumo_pais %<>% replace(is.na(consumo_pais), 0)
+```
+
+```{r ShinyUI1, layout="l-page"}
+
+fluidRow(
+  column(1, wellPanel(
+    selectInput("p", "Selecciona el País", 
+                choices = as.vector(unique(consumo_pais$Pais)), 
+                selected = "Total")
+  ))
+)
+plotOutput("consumo_pais")
+```
+
+El código del *server* de *Shiny* lo podeis encontrar en la chunk *Server1* del documento [Report_v02.Rmd](Añadir link a github).
+
+Centrándonos en el conjunto de países, en general el uso del petróleo ha disminuido en las últimas 3 décadas. El uso de gas natural como fuentes de energía ha aumentado y el del carbon ha disminuido con respecto a los años 50. Las energía nuclear y la proveniente de fuentes renovables siguen siendo las más bajas aunque han aumentado un `r (consumo_total[55,5]-consumo_total[36,5])*(1/consumo_total[36,5])*100`% y un `r (consumo_total[55,6]-consumo_total[36,6])*(1/consumo_total[36,6])*100`% respectivamente en los ultimos 20 años.
+
+```{r Renovables Moda, layout="l-page"}
+
+inputPanel( "Selecciona dos años y comparar en cuantos paises predominaba cada tipo de energía renovable",
+    sliderInput("ano1", label = "Año A:",
+              min = min(datos[,"Año"]), max = max(datos[,"Año"]),
+              value = 1965, step = 1, sep=""),
+    sliderInput("ano2", label = "Año B:",
+              min = min(datos[,"Año"]), max = max(datos[,"Año"]),
+              value = 2019, step = 1, sep="")
+  )
+plotlyOutput("ren_tipo")
+```
+
+El código del *server* de *Shiny* se encontrar en la chunk *Server2* del documento [Report_v02.Rmd](Añadir link a github).
+
+La categoría *NO* describe los países que no generan energía renovable de ningún tipo. Entonces, la fuente de renovable con la que se generado más energía en la mayoría de países ha sido, desde el 1965 hasta la actualidad la hidráulica. Un aspecto a destacar es que no fue hasta los inicios de los 70 en que empezaron a predominar entre los paises otras fuentes renovables empezando por la biomasa, luego la solar y la eólica que fue la última en llegar es la que está cogiendo más fuerza en los últimos años. 
+
+## 3.2 Temperatura y CO2  
+
+Varios estudios muestran la relación entre las emisiones de $CO_2$ y el aumento de la temperatura global de la tierra. Pero, ¿hay relación entre las emisiones de $CO_2$ percápita de un país y los cambios de temperatura que sufre?
+
+Los siguientes valores son el **promedio** entre todos los países del conjunto de datos. 
+
+```{r Evolucion Diferencia Temperatura, layout="l-screen-inset"}
+datos %>% group_by(Año) %>%
+  summarise(meanco2 = round(mean(CO2),2), meantemp = round(mean(Dif_Temp),2)) %>%
+  ggplot(aes(y=meantemp, x=Año)) +
+    geom_point(aes(color=meanco2), alpha = 0.8, size=3.5) +
+    geom_line(color="#000099") + 
+    geom_hline(yintercept = 0, linetype = "dashed", color = "#FF0000") +
+    annotate(geom = "text", y = -0.2, x = 2010, label = "Respecto el período del 1951 al 1980", color="#FF0000") + 
+    scale_colour_gradientn(colours=rainbow(4)) + 
+    scale_x_continuous(breaks=seq(1965,2020,5)) +
+    labs(title = "Evolución de la Diferencia de Temperatura promedio",
+        y = "Temperatura (ºC)",
+        color = "Emisiones per capita (kg)") +
+    My_Theme -> emisiones
+ggplotly(emisiones)  
+```
+
+Se puede observar como hasta mediados de los 80 la temperatura era más o menos **estable**. A partir de los 90, a excepción de algunos años esta temperatura no ha hecho más que aumentar.
+
+```{r layout="l-page", fig.height=5, code_folding = F}
+# CO2 Vs Diferencias de temperatura
+datos %>% group_by(Pais) %>% 
+  summarise(CO2 = round(mean(CO2),3), Dif_Temp = round(mean(Dif_Temp),3)) %>%
+  ggplot(aes(y=CO2, x=Dif_Temp, color = Pais)) +
+    geom_point(size= 4, alpha = 0.8) +
+    theme(legend.position= "none") +
+    labs(title="CO2 Vs Diferencia Temperatura") +
+    My_Theme -> co2_vs_temp
+
+ggplotly(co2_vs_temp)
+```
+
+<aside>
+**Un doble *click* en qualquier país de la leyenda permite aislar es país y a continuación ir añadiendo los países de interés.** 
+</aside>
+
+No existe ninguna relación directa entre las anomalías de temperatura y las emisiones de $CO_2$ por persona. Analizando la distribución de los países respecto al eje horizontal parece que la diferencia media de temperaturas está relacionado con la ubicación geográfica de los países. En el siguiente [enlace](https://climate.nasa.gov/vital-signs/global-temperature/) hay un gráfico que muestra la evolución del cambio de de temperaturas en la superficie terrestre sobre un mapa mundial y se  observar como se desplaza en forma de varías franjas de temperatura que cubre varios países simultaneamente. 
+
+# 4. Aprendizaje Estadístico  
+
+En este apartado se han aplicado métodos de aprendizaje estadístico a los datos analizados previamente. Inicialmente se ha realizado un **análisis de componentes principales** que junto con el **_clustering_** han representado dos formas distintas de agrupar los países. En segundo lugar, se han comparado el algoritmo **SVM** y el **Random Forest** para tratar de clasificar los países según la fuente de energía renovable con la que más energía generan. Finalmente, se ha comparado la eficiencia de una **RLM** implementando un método selección de variables (**_Forward Stepwise_**)  con la de un **Random Forest**, esta vez en la predicción de las variaciones de temperatura de la superficie terrestre.
+
+## 4.1 Analisis de Componentes Principales
+
+Para el siguiente análisis se han escogido los datos del año más reciente, 2019, para ser más próximo a la realidad actual. 
+
+```{r ACP, code_folding = F}
+# ACP
+datos %>% filter(Año == max(Año)) %>%
+  select(-c(Pais, Codigo, Año)) -> datos_acp
+paises = datos %>% filter(Año == max(Año)) %>% select(Codigo)
+rownames(datos_acp) = paises$Codigo
+# ONE-HOT Encoding
+dummy = dummyVars(~ Renovable, data = datos_acp )
+Renovable_dummy = as.data.frame(predict(dummy, newdata = datos_acp))
+Renovable_dummy %<>% select(c(Biomasa = Renovable.Biomasa, Eolica = Renovable.Eolica,
+                             Hidraulica = Renovable.Hidraulica, Solar = Renovable.Solar))
+# Ensamblaje
+datos_acp %<>% cbind(Renovable_dummy) %>% select(-c(Renovable))
+
+cp <- prcomp(datos_acp, scale = T)
+```
+
+```{r Plot ACP,layout = "l-page"}
+#Variación Explicada Acumulada
+cp.var = as.data.frame(cp$sdev^2) #Varianzas
+cp.expl = cp.var/sum(cp.var) #proporción de variación explicada
+colnames(cp.expl) = "var_explicada"
+ggplot(data = cumsum(cp.expl), aes(var_explicada, x=1:11))+
+  geom_line(color='green2') + geom_point() +
+  geom_hline(yintercept=1, linetype='dashed', color= "#FF3333") +
+  geom_bar(stat = "identity", alpha = 0.8, fill = "#99FFFF")+
+  scale_x_continuous(breaks=seq(1,11,1)) +
+  ggtitle('Variación Explicada Acumulada') +
+  xlab('Componentes Principales') + ylab('Proporción de Variación') +
+  My_Theme2
+```
+
+Se puede afirmar entonces que las 4 primeras componentes principales explican más de un $75\%$ de la variabilidad de los datos. Respecto estas componentes, en la *tabla 4* se pueden ver sus cargas que describen la relación entre las respectivas componentes y las variables originales.
+
++ **CP1:** se aproxima a un **indice negativo del consumo energético** de los países.
++ **CP2:** representa las **emisiones de $CO_2$** per cápita y el tipo de fuente renovable predominante con una mayor contribución por parte de la **hidráulica**. 
+
+Las otras componentes ya son una mezcla en la se observa parte de la contribución de la **temperatura** y una alta correlación con **tecnologías renovables** menos frecuentes que la hidráulica. 
+
+```{r Cargas, layout = "l-body-outset"}
+# Cargas
+cargas = as.data.frame(cp$rotation[,1:4])
+
+kableExtra::kable(t(cargas), caption = 'Cargas de los 4 primeros componentes principales', booktabs = T) %>%
+  kable_styling(latex_options = 'hold_position', font_size = 20)
+```
+
+En el siguiente gráfico se puede evaluar la estructura de los países. Respecto a la **primera componente** destacan dos grandes aglomeraciones a la derecha y dos puntos atípicos con valores muy negativos. Tras el análisis de las CP1 y CP2 se entienden los valores de **China** y **EE.UU** debido al alto consumo energético de ambas. Luego la separación respecto la segunda componente es menos directa ya que por ejemplo separa **Italia** de **España** que producen unas emisiones de $CO_2/capita$ similares. El hecho por el que se han representado divididas es por la contribución del otro factor de la CP2, es decir Italia emplea la energía hidráulica como su principal fuente de energía renovable, mientras que en España predomina la eólica. Este hecho, explica la mayor parte de la división entre los dos segmentos cerca del eje de ordenadas. 
+
+Puede ser interesante realizar consultas con la *tabla interactiva 2*  para entender mejor esta segmentación de los países. 
+
+```{r Biplot, layout = "l-page"}
+# Proyección sobre CP1-CP2
+proyec = as.data.frame(cp$x[,1:2])
+proyec %<>% setDT(keep.rownames=T)
+
+ggplot(proyec, aes(x = PC1, y = PC2))+
+  geom_point(size = 1.8, color = "tomato1", alpha = 0.8) +
+  geom_text_repel(aes(label = rn), size = 2, max.overlaps = 30) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "grey") + 
+  geom_vline(xintercept = 0, linetype = "dashed", color = "grey") +
+  xlim(-11,4) + 
+  ggtitle("Proyección de los Paises sobre la CP1 y CP2") +
+  My_Theme2
+```
+
+```{r Filtro Codigos}
+#Filtro Códigos
+datos %>% filter(Año == max(Año)) %>%
+  select(Pais, Codigo) %>% 
+  mutate(Codigo = as.factor(Codigo)) %>%
+  datatable(rownames = F, filter = 'top',
+            options = list(pageLength = 1, dom = "t"),
+            caption = htmltools::tags$caption(style = 'caption-side: bottom; text-align: center;',
+                                              'Tabla Interactiva 3', 
+                                              htmltools::em('Filtra el país del cual quieras saber su código o viceversa'))
+            )
+```
+
+Sería interesante para proyectos centrados en **ACP**, comparar la evolución de las componentes principales, i.e. **como cambia el foco de variabilidad entre países** con los año. También añadir otras variables para obtener indices que describan el **desarrollo de los países** o el nivel de **adversidad** frente a los efecto del cambio climático. 
+
+## 4.2 Clustering de países
+
+### K-Means 
+
+Siguiendo con la tónica del análisis anterior se ha desarrollado una segmentación de los países usando el algoritmo **KMeans**. 
+
+```{python KMeans1, echo = T, results = 'hide', code_folding = F}
+# KMeans
+datos_num = r.datos_acp #datos creados para la acp, con los dummys
+
+from sklearn.cluster import KMeans
+sdc = [] #suma de distancias cuadradas al centro del cluster respectivo
+for i in range(1,12):
+  kmeans = KMeans(n_clusters = i, init = "k-means++", max_iter = 300, n_init = 10, random_state = 0)
+  kmeans.fit(datos_num)
+  sdc.append(kmeans.inertia_)
+```
+
+<aside>
+**Python**
+</aside>
+
+```{python KMeans1 Plot, echo = T, results = 'hide'}
+# Visualización del error por k
+_ = plt.figure() 
+_ = plt.plot(range(1,12), sdc, "o--")
+_ = plt.title("Suma de distáncias cuadradas")
+_ = plt.xlabel("Número de Clusters(k)")
+_ = plt.ylabel("Suma")
+plt.show()
+```
+
+<aside>
+**Python**
+</aside>
+
+```{python KMeans2, echo = T, results = 'hide', code_folding = F}
+# Ajustar los datos con KMeans
+kmeans = KMeans(n_clusters = 4, init="k-means++", max_iter = 300, n_init = 10, random_state = 0)
+y_kmeans = kmeans.fit_predict(datos_num)
+```
+
+<aside>
+**Python**
+</aside>
+
+Para aproximarlo a la representación del apartado anterior, se han usado como dimensiones la variable *Petroleo*(CP1) y la *$CO_2$*(CP2).
+
+```{python KMeans2 Plot, echo = T, results = 'hide'}
+# Visualización de la segmentación
+_ = plt.figure() 
+labels = ["Bajo Consumo de Petróleo", "CHN", "USA", "Consumo Moderado de Petróleo"]
+colors = ["red", "blue", "green", "cyan"]
+for i in range(0,4):
+  x = datos_num.Petroleo[y_kmeans == i]
+  y = datos_num.CO2[y_kmeans == i]
+  if len(x) > 50:
+    _ = plt.scatter(datos_num.Petroleo[y_kmeans == i], datos_num.CO2[y_kmeans == i], s = 100, c = colors[i], label = labels[i], alpha=0.2)
+  else: 
+    _ = plt.scatter(datos_num.Petroleo[y_kmeans == i], datos_num.CO2[y_kmeans == i], s = 100, c = colors[i], label = labels[i])
+_ = plt.scatter(kmeans.cluster_centers_[:,4], kmeans.cluster_centers_[:,1], s = 10, c = "yellow", label = "Baricentros")
+_ = plt.title("Cluster de países")
+_ = plt.xlabel("Consumo Energía fuente Petroleo(EJ)")
+_ = plt.ylabel("Emisiones CO2 (kg/capita)")
+_ = plt.legend()
+plt.show()
+```
+
+<aside>
+**Python**
+</aside>
+
+Con la regla del codo se ha seleccionado $k=4$ como el número óptimo de clusters entre los países de estudio. Este valor coincidiendo con la segmentación del **ACP**. Como en el apartado anterior, se observan China y EE.UU en sus propias burbujas lejanos de cualquier otro país, hecho que no es de extrañar y probablemente aplicable en muchas otras métricas. Con este modelo no se ve tan clara la división de las dos aglomeraciones. A grandes rasgosc el modelo ha vuelto a dividir por la variable *Petroleo*, y algún otro factor no representado en el gráfico como por ejemplo la variable *Hidraulica* que con el **ACP** se ha visto que es un factor importante en la segmentación de los países.
+
+## 4.3 Clasificación de la fuente de renovable dominante
+
+Los datos de estudio contienen dos variables categóricas, *Pais* y *Renovable*. Debido al elevado número de valores de la primera variable, `r length(unique(datos$Pais))` países distintos, se ha seleccionado la segunda con `r length(unique(datos$Renovable))` valores como *target* de la clasificación.
+
+Para entrenar este modelo no se han usado las variables de generación energética de las fuentes renovables. Esto se debe a que la variable dependiente de esta clasificación es función de estas, concretamente el máximo de estas.
+
+Destacar que para este apartado y el siguiente, al tratarse de algoritmos de **aprendizaje supervisado** se ha usado todo el conjunto de daots, seperando una parte de este para el **entrenamiento** y otra para el **test** de los modelo.
+
+```{r}
+# Valores de la variable objetivo 65-19
+datos_clas <- datos %>% select(c(Año, Dif_Temp, CO2, Carbon, Petroleo, Gas, Nuclear, Gen_Ren, Renovable))
+frec_ren <- as.data.frame(prop.table(table(datos_clas$Renovable)))
+df = data.frame() %>% rbind(round(frec_ren$Freq*100,2))
+colnames(df) = frec_ren$Var1
+kable(df, caption = 'Distribución de valores(%), 1965-2019') %>%
+  kable_styling(latex_options = 'hold_position', font_size = 14)
+```
+
+Para equilibrar un poco las clases se han cogido datos a partir del 2013 que es cuando ya todos los países usan alguna fuente de energía renovable, i.e. desaparece la categoría *NO*, y las observaciones se distribuyen un poco más en las distintas categorías, como muestra la *Tabla 6*.
+
+```{r}
+# Valores de la variable objetivo 13-19
+datos_clas %<>% filter(Año>=2013)
+frec_ren <- as.data.frame(prop.table(table(datos_clas$Renovable)))
+df = data.frame() %>% rbind(round(frec_ren$Freq*100,2))
+colnames(df) = frec_ren$Var1
+kable(df, caption = 'Distribución de valores(%), 2013-2019') %>%
+  kable_styling(latex_options = 'hold_position', font_size = 14)
+```
+
+Este es un problema de **multiclasificación** con varias dimensiones. Se han usado dos algoritmos distinos, el **SVM**, *support vector machine* y el **Random Forest**. El siguiente código muestra el preprocesamiento de los datos para ambos modelos.
+
+```{python Preprocessing, code_folding = F}
+# Separación de variables
+X = r.datos_clas.iloc[:, 0:-1]
+y = r.datos_clas.iloc[:,-1]
+
+#Train/Test split (75/25)
+from sklearn.model_selection import train_test_split
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size = 0.25, random_state = 0)
+
+#Estandarización 
+from sklearn.preprocessing import StandardScaler
+scaler = StandardScaler()
+X_train = scaler.fit_transform(X_train)
+X_test = scaler.transform(X_test)
+```
+
+<aside>
+**Python**
+</aside>
+
+### Support Vector Machine
+
+Se han entrenado dos modelos de **SVM** uno con *kernel* `rbf` y otro polinomial de grado 3. Seguidamente se ha medido su eficiencia clasificando el set de entrenamiento mediante dos métricas, el porcentaje de observaciones correctamente clasificadas(*accuracy*) y el valor f1.
+
+```{python SVM, echo = T, results = 'hide', code_folding = F}
+# Ajustar el SVM en el Conjunto de Entrenamiento
+from sklearn.svm import SVC
+rbf = SVC(kernel = 'rbf', random_state = 1, gamma = "scale")
+rbf_pred = rbf.fit(X_train, y_train).predict(X_test)
+poly = SVC(kernel = "poly", random_state = 1, gamma = "scale")
+poly_pred = poly.fit(X_train, y_train).predict(X_test)
+
+# Evaluación de los modelos
+from sklearn.metrics import accuracy_score
+from sklearn.metrics import f1_score
+from sklearn.metrics import confusion_matrix
+rbf_accuracy = accuracy_score(y_test, rbf_pred)
+poly_accuracy = accuracy_score(y_test, poly_pred)
+# rbf_f1 = f1_score(y_test, rbf_pred, average='weighted')
+# poly_f1 = f1_score(y_test, poly_pred, average='weighted')
+```
+
+<aside>
+**Python**
+</aside>
+
+Las dos ultimas lineas de código están comentadas, pero se han ejecutado en una *chunk* escondida debido a un aviso inevitable de **Python** de la función *f1_score*.
+
+```{python SVM F1, echo = F, include=FALSE}
+rbf_f1 = f1_score(y_test, rbf_pred, average='weighted')
+poly_f1 = f1_score(y_test, poly_pred, average='weighted')
+```
+
+<aside>
+**Python**
+</aside>
+
+```{python SVM Accuracy, echo = T}
+# Precisión
+print("", 'Accuracy (RBF Kernel): ', "%.2f" % (rbf_accuracy*100), '\n',
+  'F1 (RBF Kernel): ', "%.2f" % (rbf_f1*100), '\n',
+  'Accuracy (Poly Kernel): ', "%.2f" % (poly_accuracy*100),'\n',
+  'F1 (Poly Kernel): ', "%.2f" % (poly_f1*100))
+```
+
+<aside>
+**Python**
+</aside>
+
+```{python SVM CM, echo = T, results = 'hide'}
+# Matriz de Confusión SVM
+cm = confusion_matrix(y_test, poly_pred)
+df_cm = pd.DataFrame(cm, index = [i for i in ["Biomassa","Eólica","Hidráulica","Solar"]],
+                  columns = [i for i in ["Biomassa","Eólica","Hidráulica","Solar"]])
+_ = plt.figure(figsize = (10,7))
+_ = sn.heatmap(df_cm, annot=True)
+_ = plt.title("Matriz de Confusión")
+_ = plt.xlabel("Predicción")
+_ = plt.ylabel("Real")
+plt.show()
+```
+
+<aside>
+**Python**
+</aside>
+
+### Random Forest
+
+Se ha entrenado un modelo y se ha evaluado de la misma manera que el SVM. 
+
+```{python RF, echo = T, results = 'hide', code_folding = F}
+# Ajustar un RF a los datos de train
+from sklearn.ensemble import RandomForestClassifier
+rf_model = RandomForestClassifier(n_estimators = 500,
+                                  criterion = "entropy", 
+                                  random_state = 0) 
+# Predicción
+rf_pred = rf_model.fit(X_train, y_train).predict(X_test)
+
+# Evaluación
+rf_accuracy = accuracy_score(y_test,rf_pred)
+rf_f1 = f1_score(y_test, rf_pred, average='weighted')
+```
+
+<aside>
+**Python**
+</aside>
+
+```{python RF Accuracy, echo = T}
+# Precisión
+print("", 'Accuracy (RBF Kernel): ', "%.2f" % (rf_accuracy*100),'\n',
+      'F1 (RBF Kernel): ', "%.2f" % (rf_f1*100))
+```
+
+<aside>
+**Python**
+</aside>
+
+```{python RF CM, echo = T, results = 'hide'}
+# Matriz de Confusion RF
+cm = confusion_matrix(y_test, rf_pred)
+df_cm = pd.DataFrame(cm, index = [i for i in ["Biomassa","Eólica","Hidráulica","Solar"]],
+                  columns = [i for i in ["Biomassa","Eólica","Hidráulica","Solar"]])
+_ = plt.figure(figsize = (10,7))
+_ = sn.heatmap(df_cm, annot=True)
+_ = plt.title("Matriz de Confusión Random Forest")
+_ = plt.xlabel("Predicción")
+_ = plt.ylabel("Real")
+plt.show()
+```
+
+<aside>
+**Python**
+</aside>
+
+En la precisión de los dos modelos vemos que la del *Random forest* es significativamente mejor. Esto se ve representado en las matrices de confusión, donde vemos que las dos predicen igual la clase **Hidráulica** pero el segundo modelo aumenta la precisión en las otras tres clases. 
+
+## 4.4 Predicción de las anomalías de Temperatura
+
+Para poder aplicar algoritmos de predicción a los datos de estudio se ha decidido predecir los valores de *Dif_Temp* apartir de las otras variables. En la realidad esto no tendría mucho sentido ya que las variables son registradas de forma simultanea por lo que no tiene valor predecir la anomalía de temperatura que ocurre en el mismo momento en que se puede medir.   
+
+### RLM con selección Forwars Stepwise
+
+```{r RLM, code_folding = F}
+# Selección de Variables
+datos_reg = datos %>% select(-c(Pais, Codigo))
+
+#ONE-HOT Encoding
+dummy_reg = dummyVars(~ Renovable, data = datos_reg)
+Renovable_dummy = as.data.frame(predict(dummy_reg, newdata = datos_reg))
+Renovable_dummy %<>% select(c(Biomasa = Renovable.Biomasa, Eolica = Renovable.Eolica,
+                             Hidraulica = Renovable.Hidraulica, Solar = Renovable.Solar))
+#Ensamblaje
+datos_reg %<>% cbind(Renovable_dummy) %>% select(-c(Renovable))
+
+set.seed(12)
+
+#Train/Test 75/25%
+train_idx = sample(nrow(datos_reg), nrow(datos_reg)*0.75)
+datos.train = datos_reg[train_idx, ]
+datos.test = datos_reg[-train_idx, ]
+
+num_var <- as.numeric(ncol(datos_acp) - 1) #Vars explicativas
+
+# Función de predicción
+predict = function(object, newdata, id, ...){
+  form = as.formula(object$call[[2]])
+  mat = model.matrix(form, newdata)
+  coefi = coef(object,id=id)
+  xvars = names(coefi)
+  mat[,xvars]%*%coefi
+}
+
+# 10folds CV
+k = 10
+folds = sample(1:k, nrow(datos.train), replace=TRUE)
+cv.errors = matrix(NA,k,num_var, dimnames =list(NULL , paste(1:num_var)))
+for(j in 1:k){
+  best.fit = regsubsets(Dif_Temp~.,data = datos.train[folds!=j,],
+                      nvmax = num_var, method='forward') #Forward SW
+  for(i in 1:num_var){
+    pred = predict(best.fit, datos.train[folds==j,],id = i)
+    cv.errors[j,i]=mean( (datos.train$Dif_Temp[folds==j]-pred)^2)
+  }
+}
+rmse.cv = sqrt(apply(cv.errors, 2, mean))
+plot(rmse.cv, pch=19, type="b", main="Error", xlab="Número de variables del modelo")
+
+# Conjunto óptimo de variables
+reg.sub = regsubsets(Dif_Temp~.,data = datos.train, nvmax = num_var, method='forward')
+coef(reg.sub, id = 4)
+```
+Estas son las 4 variables que forman el modelo óptimo encontrado siguiendo el método de selección *forward step-wise*. Seguidamente se ha calculado una regresión lineal múltiple con estas variables.
+
+```{r RLM Pred, code_folding = F}
+# Modelo Final
+reg.f = lm(Dif_Temp ~ Año + Petroleo + Nuclear + Eolica, data = datos.train)
+lm.pred = predict(reg.f, newdata = datos.test)
+error.rlm = mean((datos.test[, "Dif_Temp"] - lm.pred)^2) 
+summary(reg.f)
+```
+De la regresión anterior todas las variables son estadisticamente significativas al $1\%$. Respecto la precisión del modelo para explicar las diferencia de temperaturas, el $R^2_{ajustado}$ indica que la regresión explica alrededor de la mitad de variable dependiente. 
+
+### Random Forest Regression
+
+Ya que este algoritmo ha sido tan eficiente en la clasificación del apartado anterior, ha sido seleccionado también en la predicción de las diferencias de temperatura. Para entrenar el **Random Forest** se van han usado las mismas variables y conjuntos de entrenamiento y test que con la **RLM**.
+
+Mediante un grid searching se ha calculado el valor optimo para el parámetro *m* del modelo. Este parámetro representa el número de variables, elegidas aleatoriamente, usadas como candidatos en cada *split*).
+
+```{r RF Reg1}
+# Tuning de m
+mtry = c(2,4,6,8,10)
+errors = matrix(NA , length(mtry) , 1, dimnames =list(paste(mtry), NULL))
+set.seed(12)
+for(i in 1:length(mtry)){
+  rf = randomForest(Dif_Temp~ . , data = datos.train, mtry = mtry[i],
+                 metric = 'RMSE')
+  errors[i,1] = mean(rf$rsq)
+}
+plot(x = rownames(errors), errors, pch=19, type = "b", 
+     main = "Error", xlab= "m", ylab= "RMSE")
+```
+
+```{r RF Reg2}
+# Modelo Final
+rf.f = randomForest(Dif_Temp ~ . ,
+                    data = datos.train,
+                    ntree = 500, mtry = 2,
+                    metric = 'RMSE', importance = T)
+# rf.pred = predict(rf.f, newdata = datos.test)
+# error.rf = mean((datos.test[, "Dif_Temp"] - rf.pred)^2)
+
+#Importancias de las variables 
+rf.f$importance %>% as.data.frame() %>%
+  select(Prop_ECM = "%IncMSE") %>%
+  cbind(Var = rownames(rf.f$importance)) %>%
+  ggplot(aes(x = Var, y = Prop_ECM)) +
+    geom_bar(stat = "identity", aes(fill = Var)) +
+    theme_minimal() +
+    theme(axis.title.x = element_blank(), axis.text.x = element_blank(),axis.ticks.x = element_blank()) +
+    ggtitle('Proporción de reducción Media del ECM')
+```
+
+
+Un estudio interesante sobre la predicción de anomalías de temperatura que se podría hacer con estos datos es una predicción por serie temporal. En este caso si se estarían prediciendo valores que aún serían desconocidos.
+
+# Conclusiones 
+
+El objetivo del proyecto era desarrollar una comparativa entre el consumo energético de diferentes países y sus emisiones de $CO_2$, además de tener una visión de las anomalías de temperatura que estamos sufriendo en los últimos años a nivel global. Creo que con el anterior análisis se ha alcanzado este objetivos. Además, han aparecido nuevas idea más concretas sobre que caminos de investigación pueden ser interesantes en este ámbito. Uno que me interesa en especial es el desarrollo de indicadores para comparar los países. Otro ejemplo sería el análisis de la relación entre las emisiones de $CO_2$ *percápita* y la fuente de energía primaria más usada en el país. En conclusión, a mi parecer este ha sido un proyecto muy interesante con el que he aprendido mucho no solo en conceptos, también en intereses profesionales.
+
+# Run Document
+
+Ejecutar el siguiente código para hacer ejecutar el documente y obtener el *distill* de output. Para la salida del distill con shiny:
+
+  1. `rmarkdown::render("nombre_archivo.Rmd")` 
+  2. `rmarkdown::run("nombre_archivo.Rmd")` Abre el distill con objetos shiny pero lo tiene que ejecutar uno mismo en su IDE de R.
+
+<!-- # Servers  -->
+
+```{r echo=TRUE, Server1, context="server"}
+
+output$consumo_pais <- renderPlot({
+  consumo_pais %>% pivot_longer(c('Carbon':'Renovables'), names_to = 'Fuente', values_to = 'Consumo') %>%
+  mutate(Fuente =factor(Fuente, levels=c("Renovables","Nuclear","Gas","Petroleo","Carbon"))) %>%
+  filter(Pais == input$p) %>%
+  ggplot(aes(x = Año, y = Consumo, fill = Fuente)) +
+    geom_line(aes(color=Fuente), size = 1.5, alpha=0.7) +
+    scale_x_continuous(breaks=seq(1965,2020,5)) +
+    ylab("Consumo%") +
+    ggtitle("Proporción de consumo energético por fuente primaria",
+            subtitle = "Entre los años 1965 y 2019")+
+    My_Theme
+})
+```
+
+```{r Server2, context="server"}
+
+output$ren_tipo <- renderPlotly({
+  p1 = datos %>% filter(Año == input$ano1) %>%
+    ggplot(aes(x=Renovable)) +
+    geom_bar(stat = "count", alpha = 0.8, aes(fill=Renovable)) +
+    labs( y = "Número de paises") +
+    My_Theme +
+    theme(legend.position= "none",
+          axis.text.x = element_text(angle = -45, vjust = 0.5, hjust=1))
+
+  p2 = datos %>% filter(Año == input$ano2) %>%
+    ggplot(aes(x=Renovable)) +
+    geom_bar(stat = "count", alpha = 0.8, aes(fill=Renovable)) +
+    labs( y = "Número de paises") +
+    My_Theme +
+    theme(legend.position= "none",
+          axis.text.x = element_text(angle = -45, vjust = 0.5, hjust=1))
+
+  subplot(ggplotly(p1), ggplotly(p2), shareY = T, shareX = F)
+})
+```
