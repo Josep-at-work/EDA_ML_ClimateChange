@@ -1,4 +1,9 @@
-# Trabajo Final Tec.ADM
+# Comparativa de Paises
+
+*en*: Countries comparison in terms of **energy consumption**, **CO2 emissions**, and **temperature anomalies** during the last decades.
+
+*esp*: Comparativa de países en términos de consumo energético, emisiones de CO2 y anomal
+
  Trabajo final de la asignatura de tecnologías para el análisis de datos massivos.
 
 + [Report.Rmd](https://github.com/Josep-at-work/Trabajo-Final-Tec.ADM/blob/main/Report.Rmd) contiene el código principal con el que se ha desarrollado el informe.
